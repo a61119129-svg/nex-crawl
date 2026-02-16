@@ -97,3 +97,81 @@ class ExtractResult(BaseModel):
     url: str
     data: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Format (structured data) models
+# ---------------------------------------------------------------------------
+
+class FormatRequest(BaseModel):
+    """Payload accepted by the /v1/format endpoint."""
+    url: str
+    formats: list[OutputFormat] = Field(default=[OutputFormat.html])
+    use_browser: bool = False
+    wait_for: int = 0
+    only_main_content: bool = True
+
+
+class FormatResult(BaseModel):
+    url: str
+    tables: list[dict[str, Any]] = Field(default_factory=list)
+    lists: list[dict[str, Any]] = Field(default_factory=list)
+    key_value_pairs: list[dict[str, str]] = Field(default_factory=list)
+    headings: list[dict[str, Any]] = Field(default_factory=list)
+    tables_csv: str = ""
+    tables_markdown: str = ""
+    summary: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# AI Analyze models
+# ---------------------------------------------------------------------------
+
+class AnalyzeRequest(BaseModel):
+    """Payload accepted by the /v1/analyze endpoint."""
+    url: str
+    instruction: str | None = Field(
+        default=None,
+        description="Custom prompt / question about the content (optional)",
+    )
+    use_browser: bool = False
+    wait_for: int = 0
+    only_main_content: bool = True
+
+
+class AnalyzeResult(BaseModel):
+    url: str
+    analysis: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Deep Scan (unified pipeline) models
+# ---------------------------------------------------------------------------
+
+class ScanRequest(BaseModel):
+    """Payload accepted by the /v1/scan endpoint — runs full pipeline."""
+    url: str
+    use_browser: bool = Field(default=False, description="Force headless browser rendering")
+    wait_for: int = Field(default=0, description="Extra ms to wait (JS rendering)")
+    timeout: int = Field(default=30000, description="Request timeout in ms")
+    instruction: str | None = Field(
+        default=None,
+        description="Custom AI instruction for analysis (optional)",
+    )
+    include_ai: bool = Field(default=True, description="Include AI analysis step")
+    only_main_content: bool = Field(default=True, description="Strip navs/footers")
+
+
+class ScanResult(BaseModel):
+    url: str
+    success: bool = False
+    timing: dict[str, float] = Field(default_factory=dict)
+    scan_summary: dict[str, Any] = Field(default_factory=dict)
+    scrape: dict[str, Any] = Field(default_factory=dict)
+    site_detection: dict[str, Any] = Field(default_factory=dict)
+    smart_extraction: dict[str, Any] = Field(default_factory=dict)
+    structured_data: dict[str, Any] = Field(default_factory=dict)
+    ai_analysis: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None

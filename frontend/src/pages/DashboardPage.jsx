@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Globe, Layers, Bug, FileSearch } from 'lucide-react'
+import { Globe, Layers, Bug, FileSearch, Table, Brain } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 export default function DashboardPage() {
@@ -50,6 +50,12 @@ export default function DashboardPage() {
           </button>
           <button className="btn btn-secondary" onClick={() => navigate('/extract')}>
             <FileSearch size={16} /> Extract Data
+          </button>
+          <button className="btn btn-secondary" onClick={() => navigate('/format')}>
+            <Table size={16} /> Format Data
+          </button>
+          <button className="btn btn-secondary" onClick={() => navigate('/analyze')}>
+            <Brain size={16} /> AI Analyze
           </button>
         </div>
       </div>
