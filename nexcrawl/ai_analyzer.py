@@ -305,11 +305,15 @@ async def chat_with_context(
     }
 
     try:
+        api_key = _get_api_key()
+        if not api_key:
+            return {"reply": "GROQ_API_KEY not set. Configure it to use AI chat.", "messages": messages}
+
         async with httpx.AsyncClient(timeout=60) as client:
             for attempt in range(3):
                 resp = await client.post(
                     GROQ_API_URL,
-                    headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                     json=payload,
                 )
                 if resp.status_code == 429:
