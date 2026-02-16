@@ -14,6 +14,7 @@ from nexcrawl.extractor import extract
 from nexcrawl.formatter import format_scraped_data
 from nexcrawl.ai_analyzer import analyze_content, analyze_with_prompt
 from nexcrawl.deep_scan import deep_scan
+from nexcrawl.plans_scraper import scrape_plans_page
 from nexcrawl.models import (
     AnalyzeRequest,
     AnalyzeResult,
@@ -24,6 +25,8 @@ from nexcrawl.models import (
     FormatRequest,
     FormatResult,
     OutputFormat,
+    PlansRequest,
+    PlansResult,
     ScanRequest,
     ScanResult,
     ScrapeRequest,
@@ -234,6 +237,8 @@ async def scan_endpoint(request: ScanRequest):
             instruction=request.instruction,
             include_ai=request.include_ai,
             only_main_content=request.only_main_content,
+            stealth=request.stealth,
+            bypass_captcha=request.bypass_captcha,
         )
 
         if result.get("error") and not result.get("success"):
@@ -244,3 +249,64 @@ async def scan_endpoint(request: ScanRequest):
     except Exception as exc:
         logger.exception("Deep scan failed for %s", request.url)
         return ScanResult(url=request.url, error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Plans (pricing page scraper)
+# ---------------------------------------------------------------------------
+
+@app.post("/v1/plans", response_model=PlansResult)
+async def plans_endpoint(request: PlansRequest):
+    """
+    Scrape a pricing/plans page with stealth browser, CAPTCHA bypass,
+    and automatic filter interaction (monthly/yearly toggles, etc.).
+    """
+    try:
+        result = await scrape_plans_page(
+            request.url,
+            filter_selectors=request.filter_selectors,
+            click_selectors=request.click_selectors,
+            wait_for=request.wait_for,
+            timeout=request.timeout,
+            load_all_pages=request.load_all_pages,
+            next_button_selector=request.next_button_selector,
+            max_pages=request.max_pages,
+        )
+
+        # Optional AI analysis of the plans
+        ai_result = {}
+        if request.include_ai and result.get("success") and result.get("markdown"):
+            try:
+                ai_result = await analyze_with_prompt(
+                    url=request.url,
+                    content=result["markdown"],
+                    instruction=(
+                        "Analyze these pricing plans. Compare value propositions, "
+                        "identify the best plan for different use cases (startup, "
+                        "mid-size, enterprise), highlight hidden costs or limitations, "
+                        "and give a recommendation."
+                    ),
+                )
+            except Exception as e:
+                logger.warning("AI analysis of plans failed: %s", e)
+                ai_result = {"error": str(e)}
+
+        return PlansResult(
+            url=request.url,
+            success=result.get("success", False),
+            all_plans=result.get("all_plans", []),
+            plans_by_filter=result.get("plans_by_filter", {}),
+            comparison_table=result.get("comparison_table"),
+            billing_options=result.get("billing_options", []),
+            total_plans_found=result.get("total_plans_found", 0),
+            filter_states_scraped=result.get("filter_states_scraped", 0),
+            pages_loaded=result.get("pages_loaded", 1),
+            markdown=result.get("markdown", ""),
+            ai_analysis=ai_result,
+            timing=result.get("timing", 0),
+            error=result.get("error"),
+        )
+
+    except Exception as exc:
+        logger.exception("Plans scraping failed for %s", request.url)
+        return PlansResult(url=request.url, error=str(exc))

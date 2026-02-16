@@ -25,6 +25,8 @@ async def deep_scan(
     instruction: str | None = None,
     include_ai: bool = True,
     only_main_content: bool = True,
+    stealth: bool = False,
+    bypass_captcha: bool = False,
 ) -> dict[str, Any]:
     """
     Run the full NexCrawl pipeline on a single URL:
@@ -62,6 +64,8 @@ async def deep_scan(
             wait_for=wait_for,
             timeout=timeout,
             only_main_content=only_main_content,
+            stealth=stealth,
+            bypass_captcha=bypass_captcha,
         )
         scrape_result = await scrape(scrape_req)
 

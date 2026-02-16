@@ -1,5 +1,5 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
-import { Globe, Bug, FileSearch, Layers, Zap, Table, Brain, Radar } from 'lucide-react'
+import { Globe, Bug, FileSearch, Layers, Zap, Table, Brain, Radar, CreditCard } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { healthCheck } from './api'
 import ScrapePage from './pages/ScrapePage'
@@ -8,6 +8,7 @@ import ExtractPage from './pages/ExtractPage'
 import FormatPage from './pages/FormatPage'
 import AnalyzePage from './pages/AnalyzePage'
 import ScanPage from './pages/ScanPage'
+import PlansPage from './pages/PlansPage'
 import DashboardPage from './pages/DashboardPage'
 
 export default function App() {
@@ -40,6 +41,9 @@ export default function App() {
         <NavLink to="/scan" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
           <Radar size={18} /> Deep Scan
         </NavLink>
+        <NavLink to="/plans" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+          <CreditCard size={18} /> Plans Scraper
+        </NavLink>
         <NavLink to="/scrape" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
           <Globe size={18} /> Scrape
         </NavLink>
@@ -66,6 +70,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/scan" element={<ScanPage />} />
+          <Route path="/plans" element={<PlansPage />} />
           <Route path="/scrape" element={<ScrapePage />} />
           <Route path="/crawl" element={<CrawlPage />} />
           <Route path="/extract" element={<ExtractPage />} />

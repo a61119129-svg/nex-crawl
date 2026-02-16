@@ -20,6 +20,8 @@ export default function ScrapePage() {
   const [useBrowser, setUseBrowser] = useState(false)
   const [mainContent, setMainContent] = useState(true)
   const [waitFor, setWaitFor] = useState(0)
+  const [stealth, setStealth] = useState(false)
+  const [bypassCaptcha, setBypassCaptcha] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
@@ -38,6 +40,8 @@ export default function ScrapePage() {
         use_browser: useBrowser,
         only_main_content: mainContent,
         wait_for: waitFor,
+        stealth,
+        bypass_captcha: bypassCaptcha,
       })
       setResult(data)
       saveHistory({ type: 'scrape', url: url.trim(), time: Date.now(), error: null })
@@ -47,7 +51,7 @@ export default function ScrapePage() {
     } finally {
       setLoading(false)
     }
-  }, [url, format, useBrowser, mainContent, waitFor])
+  }, [url, format, useBrowser, mainContent, waitFor, stealth, bypassCaptcha])
 
   const content = result ? (result.markdown || result.html || result.text || result.raw_html || '') : ''
 
@@ -108,6 +112,14 @@ export default function ScrapePage() {
           <label className="toggle-label">
             <input type="checkbox" checked={useBrowser} onChange={e => setUseBrowser(e.target.checked)} />
             Use headless browser
+          </label>
+          <label className="toggle-label">
+            <input type="checkbox" checked={stealth} onChange={e => setStealth(e.target.checked)} />
+            Stealth mode
+          </label>
+          <label className="toggle-label">
+            <input type="checkbox" checked={bypassCaptcha} onChange={e => setBypassCaptcha(e.target.checked)} />
+            Bypass CAPTCHA
           </label>
         </div>
 

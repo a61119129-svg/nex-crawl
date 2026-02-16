@@ -41,6 +41,8 @@ class ScrapeRequest(BaseModel):
     timeout: int = Field(default=30_000, description="Request timeout in ms")
     headers: dict[str, str] | None = None
     use_browser: bool = Field(default=False, description="Force headless browser rendering")
+    stealth: bool = Field(default=False, description="Enable stealth anti-detection mode")
+    bypass_captcha: bool = Field(default=False, description="Attempt to bypass reCAPTCHA/hCaptcha/Cloudflare")
 
 
 class CrawlRequest(BaseModel):
@@ -162,6 +164,8 @@ class ScanRequest(BaseModel):
     )
     include_ai: bool = Field(default=True, description="Include AI analysis step")
     only_main_content: bool = Field(default=True, description="Strip navs/footers")
+    stealth: bool = Field(default=False, description="Enable stealth anti-detection mode")
+    bypass_captcha: bool = Field(default=False, description="Attempt to bypass CAPTCHAs")
 
 
 class ScanResult(BaseModel):
@@ -174,4 +178,46 @@ class ScanResult(BaseModel):
     smart_extraction: dict[str, Any] = Field(default_factory=dict)
     structured_data: dict[str, Any] = Field(default_factory=dict)
     ai_analysis: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Plans scraping models
+# ---------------------------------------------------------------------------
+
+class PlansRequest(BaseModel):
+    """Payload accepted by the /v1/plans endpoint."""
+    url: str
+    filter_selectors: list[str] | None = Field(
+        default=None,
+        description="CSS selectors for filter buttons to click (auto-detected if omitted)",
+    )
+    click_selectors: list[str] | None = Field(
+        default=None,
+        description="Specific elements to click (e.g. monthly/yearly toggle)",
+    )
+    wait_for: int = Field(default=2000, description="Wait ms after each interaction")
+    timeout: int = Field(default=45000, description="Total timeout in ms")
+    load_all_pages: bool = Field(default=False, description="Paginate through results")
+    next_button_selector: str | None = Field(
+        default=None,
+        description="CSS selector for 'next page' button (only if load_all_pages=True)",
+    )
+    max_pages: int = Field(default=5, ge=1, le=50, description="Max pagination pages to load")
+    include_ai: bool = Field(default=True, description="Include AI analysis of plans")
+
+
+class PlansResult(BaseModel):
+    url: str
+    success: bool = False
+    all_plans: list[dict[str, Any]] = Field(default_factory=list)
+    plans_by_filter: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
+    comparison_table: dict[str, Any] | None = None
+    billing_options: list[str] = Field(default_factory=list)
+    total_plans_found: int = 0
+    filter_states_scraped: int = 0
+    pages_loaded: int = 1
+    markdown: str = ""
+    ai_analysis: dict[str, Any] = Field(default_factory=dict)
+    timing: float = 0
     error: str | None = None

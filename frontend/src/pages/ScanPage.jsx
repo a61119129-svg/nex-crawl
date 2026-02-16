@@ -18,6 +18,8 @@ export default function ScanPage() {
   const [useBrowser, setUseBrowser] = useState(false)
   const [mainContent, setMainContent] = useState(true)
   const [includeAi, setIncludeAi] = useState(true)
+  const [stealth, setStealth] = useState(false)
+  const [bypassCaptcha, setBypassCaptcha] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
@@ -39,6 +41,8 @@ export default function ScanPage() {
         use_browser: useBrowser,
         only_main_content: mainContent,
         include_ai: includeAi,
+        stealth,
+        bypass_captcha: bypassCaptcha,
       }
       if (instruction.trim()) payload.instruction = instruction.trim()
       const data = await deepScan(payload)
@@ -49,7 +53,7 @@ export default function ScanPage() {
     } finally {
       setLoading(false)
     }
-  }, [url, instruction, useBrowser, mainContent, includeAi])
+  }, [url, instruction, useBrowser, mainContent, includeAi, stealth, bypassCaptcha])
 
   const handleCopy = () => {
     navigator.clipboard.writeText(JSON.stringify(result, null, 2))
@@ -116,6 +120,14 @@ export default function ScanPage() {
           <label className="toggle-label">
             <input type="checkbox" checked={includeAi} onChange={e => setIncludeAi(e.target.checked)} />
             Include AI analysis
+          </label>
+          <label className="toggle-label">
+            <input type="checkbox" checked={stealth} onChange={e => setStealth(e.target.checked)} />
+            Stealth mode
+          </label>
+          <label className="toggle-label">
+            <input type="checkbox" checked={bypassCaptcha} onChange={e => setBypassCaptcha(e.target.checked)} />
+            Bypass CAPTCHA
           </label>
         </div>
 
