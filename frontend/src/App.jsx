@@ -1,7 +1,8 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
-import { Globe, Bug, FileSearch, Layers, Zap, Table, Brain, Radar, CreditCard } from 'lucide-react'
+import { Globe, Bug, FileSearch, Layers, Zap, Table, Brain, Radar, CreditCard, Camera } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { healthCheck } from './api'
+import CommandCenter from './pages/CommandCenter'
 import ScrapePage from './pages/ScrapePage'
 import CrawlPage from './pages/CrawlPage'
 import ExtractPage from './pages/ExtractPage'
@@ -36,13 +37,17 @@ export default function App() {
         </div>
 
         <NavLink to="/" end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+          <Zap size={18} /> Command Center
+        </NavLink>
+
+        <div style={{ padding: '8px 16px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: '#475569' }}>
+          Individual Tools
+        </div>
+        <NavLink to="/dashboard" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
           <Layers size={18} /> Dashboard
         </NavLink>
         <NavLink to="/scan" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
           <Radar size={18} /> Deep Scan
-        </NavLink>
-        <NavLink to="/plans" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-          <CreditCard size={18} /> Plans Scraper
         </NavLink>
         <NavLink to="/scrape" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
           <Globe size={18} /> Scrape
@@ -59,6 +64,9 @@ export default function App() {
         <NavLink to="/analyze" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
           <Brain size={18} /> AI Analyze
         </NavLink>
+        <NavLink to="/plans" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+          <CreditCard size={18} /> Plans Scraper
+        </NavLink>
 
         <div className="sidebar-footer">
           <span className={`status-dot ${apiStatus === 'online' ? 'online' : 'offline'}`} />
@@ -68,7 +76,8 @@ export default function App() {
 
       <main className="main">
         <Routes>
-          <Route path="/" element={<DashboardPage />} />
+          <Route path="/" element={<CommandCenter />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/scan" element={<ScanPage />} />
           <Route path="/plans" element={<PlansPage />} />
           <Route path="/scrape" element={<ScrapePage />} />

@@ -95,3 +95,16 @@ export async function scrapePlans(payload) {
   }
   return res.json();
 }
+
+export async function takeScreenshot(payload) {
+  const res = await fetch(`${API_BASE}/v1/screenshot`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'Screenshot failed');
+  }
+  return res.json();
+}

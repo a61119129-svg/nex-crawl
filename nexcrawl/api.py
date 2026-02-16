@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from nexcrawl.browser import close_browser
+from nexcrawl.browser import close_browser, take_screenshot
 from nexcrawl.crawler import crawl_sync, get_crawl_job, start_crawl
 from nexcrawl.extractor import extract
 from nexcrawl.formatter import format_scraped_data
@@ -29,6 +29,8 @@ from nexcrawl.models import (
     PlansResult,
     ScanRequest,
     ScanResult,
+    ScreenshotRequest,
+    ScreenshotResult,
     ScrapeRequest,
     ScrapeResult,
 )
@@ -310,3 +312,39 @@ async def plans_endpoint(request: PlansRequest):
     except Exception as exc:
         logger.exception("Plans scraping failed for %s", request.url)
         return PlansResult(url=request.url, error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Screenshot
+# ---------------------------------------------------------------------------
+
+@app.post("/v1/screenshot", response_model=ScreenshotResult)
+async def screenshot_endpoint(request: ScreenshotRequest):
+    """
+    Take a full-page or viewport screenshot of any URL.
+    Returns base64-encoded PNG image data.
+    """
+    try:
+        result = await take_screenshot(
+            request.url,
+            full_page=request.full_page,
+            wait_for=request.wait_for,
+            timeout=request.timeout,
+            stealth=request.stealth,
+            bypass_captcha=request.bypass_captcha,
+            viewport_width=request.viewport_width,
+            viewport_height=request.viewport_height,
+        )
+        return ScreenshotResult(
+            url=request.url,
+            success=True,
+            screenshot_base64=result["screenshot_base64"],
+            content_type=result["content_type"],
+            title=result.get("title", ""),
+            status_code=result.get("status_code"),
+            viewport=result.get("viewport", {}),
+            full_page=result.get("full_page", True),
+        )
+    except Exception as exc:
+        logger.exception("Screenshot failed for %s", request.url)
+        return ScreenshotResult(url=request.url, error=str(exc))

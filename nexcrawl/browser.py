@@ -451,6 +451,92 @@ async def _scroll_to_bottom(page, *, max_scrolls: int = 10, delay_ms: int = 500)
             break
 
 
+async def take_screenshot(
+    url: str,
+    *,
+    full_page: bool = True,
+    wait_for: int = 0,
+    timeout: int | None = None,
+    stealth: bool = False,
+    bypass_captcha: bool = False,
+    viewport_width: int = 1280,
+    viewport_height: int = 800,
+) -> dict[str, Any]:
+    """
+    Take a screenshot of a page and return base64-encoded PNG data.
+
+    Returns dict with:
+      - screenshot_base64: the PNG image data as base64
+      - content_type: 'image/png'
+      - url: the page URL
+      - title: the page title
+      - status_code: HTTP status
+      - viewport: the viewport size used
+    """
+    import base64
+
+    use_stealth = stealth or bypass_captcha
+    browser = await _get_browser(stealth_mode=use_stealth)
+
+    if use_stealth:
+        context = await _create_stealth_context(browser, user_agent=_random_ua())
+    else:
+        context = await browser.new_context(
+            user_agent=config.user_agent,
+            viewport={"width": viewport_width, "height": viewport_height},
+        )
+
+    page = await context.new_page()
+
+    if use_stealth:
+        await page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            window.chrome = { runtime: {} };
+        """)
+
+    try:
+        response = await page.goto(
+            url,
+            wait_until="networkidle",
+            timeout=timeout or config.browser_timeout,
+        )
+        status_code = response.status if response else 0
+
+        # Handle CAPTCHAs
+        if bypass_captcha:
+            for _ in range(3):
+                detected = await _solve_captcha_challenges(page)
+                if not detected:
+                    break
+                await page.wait_for_load_state("networkidle")
+
+        if wait_for > 0:
+            await page.wait_for_timeout(wait_for)
+
+        # Get page title
+        title = await page.title()
+
+        # Take screenshot
+        screenshot_bytes = await page.screenshot(
+            full_page=full_page,
+            type="png",
+        )
+        screenshot_b64 = base64.b64encode(screenshot_bytes).decode("utf-8")
+
+        return {
+            "screenshot_base64": screenshot_b64,
+            "content_type": "image/png",
+            "url": url,
+            "title": title,
+            "status_code": status_code,
+            "viewport": {"width": viewport_width, "height": viewport_height},
+            "full_page": full_page,
+        }
+
+    finally:
+        await context.close()
+
+
 async def close_browser() -> None:
     """Shut down the shared browser (call on app shutdown)."""
     global _browser, _playwright

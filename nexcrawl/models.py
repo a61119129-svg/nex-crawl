@@ -221,3 +221,31 @@ class PlansResult(BaseModel):
     ai_analysis: dict[str, Any] = Field(default_factory=dict)
     timing: float = 0
     error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Screenshot models
+# ---------------------------------------------------------------------------
+
+class ScreenshotRequest(BaseModel):
+    """Payload accepted by the /v1/screenshot endpoint."""
+    url: str
+    full_page: bool = Field(default=True, description="Capture full scrollable page (not just viewport)")
+    wait_for: int = Field(default=0, description="Extra ms to wait after page load")
+    timeout: int = Field(default=30000, description="Navigation timeout in ms")
+    stealth: bool = Field(default=False, description="Enable stealth anti-detection mode")
+    bypass_captcha: bool = Field(default=False, description="Attempt to bypass CAPTCHAs")
+    viewport_width: int = Field(default=1280, ge=320, le=3840, description="Viewport width")
+    viewport_height: int = Field(default=800, ge=240, le=2160, description="Viewport height")
+
+
+class ScreenshotResult(BaseModel):
+    url: str
+    success: bool = False
+    screenshot_base64: str = ""
+    content_type: str = "image/png"
+    title: str = ""
+    status_code: int | None = None
+    viewport: dict[str, int] = Field(default_factory=dict)
+    full_page: bool = True
+    error: str | None = None
