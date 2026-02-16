@@ -40,9 +40,10 @@ class ScrapeRequest(BaseModel):
     only_main_content: bool = Field(default=True, description="Strip navs, footers, etc.")
     timeout: int = Field(default=30_000, description="Request timeout in ms")
     headers: dict[str, str] | None = None
-    use_browser: bool = Field(default=False, description="Force headless browser rendering")
+    use_browser: bool = Field(default=True, description="Use headless browser rendering (required for cookies/JS)")
     stealth: bool = Field(default=False, description="Enable stealth anti-detection mode")
     bypass_captcha: bool = Field(default=False, description="Attempt to bypass reCAPTCHA/hCaptcha/Cloudflare")
+    accept_cookies: bool = Field(default=True, description="Auto-accept cookie consent banners")
 
 
 class CrawlRequest(BaseModel):
@@ -54,7 +55,7 @@ class CrawlRequest(BaseModel):
     include_paths: list[str] | None = Field(default=None, description="Glob patterns for allowed URL paths")
     exclude_paths: list[str] | None = Field(default=None, description="Glob patterns to skip")
     only_main_content: bool = True
-    use_browser: bool = False
+    use_browser: bool = True
     wait_for: int = 0
 
 
@@ -67,7 +68,7 @@ class ExtractRequest(BaseModel):
         ..., alias="schema",
         description="JSON-like schema describing which fields to extract via CSS/XPath selectors",
     )
-    use_browser: bool = False
+    use_browser: bool = True
     wait_for: int = 0
 
 
@@ -109,7 +110,7 @@ class FormatRequest(BaseModel):
     """Payload accepted by the /v1/format endpoint."""
     url: str
     formats: list[OutputFormat] = Field(default=[OutputFormat.html])
-    use_browser: bool = False
+    use_browser: bool = True
     wait_for: int = 0
     only_main_content: bool = True
 
@@ -137,7 +138,7 @@ class AnalyzeRequest(BaseModel):
         default=None,
         description="Custom prompt / question about the content (optional)",
     )
-    use_browser: bool = False
+    use_browser: bool = True
     wait_for: int = 0
     only_main_content: bool = True
 
@@ -155,7 +156,7 @@ class AnalyzeResult(BaseModel):
 class ScanRequest(BaseModel):
     """Payload accepted by the /v1/scan endpoint — runs full pipeline."""
     url: str
-    use_browser: bool = Field(default=False, description="Force headless browser rendering")
+    use_browser: bool = Field(default=True, description="Use headless browser rendering")
     wait_for: int = Field(default=0, description="Extra ms to wait (JS rendering)")
     timeout: int = Field(default=30000, description="Request timeout in ms")
     instruction: str | None = Field(
@@ -166,6 +167,7 @@ class ScanRequest(BaseModel):
     only_main_content: bool = Field(default=True, description="Strip navs/footers")
     stealth: bool = Field(default=False, description="Enable stealth anti-detection mode")
     bypass_captcha: bool = Field(default=False, description="Attempt to bypass CAPTCHAs")
+    accept_cookies: bool = Field(default=True, description="Auto-accept cookie consent banners")
 
 
 class ScanResult(BaseModel):

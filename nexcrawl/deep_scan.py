@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 async def deep_scan(
     *,
     url: str,
-    use_browser: bool = False,
+    use_browser: bool = True,
     wait_for: int = 0,
     timeout: int = 30000,
     instruction: str | None = None,
@@ -27,6 +27,7 @@ async def deep_scan(
     only_main_content: bool = True,
     stealth: bool = False,
     bypass_captcha: bool = False,
+    accept_cookies: bool = True,
 ) -> dict[str, Any]:
     """
     Run the full NexCrawl pipeline on a single URL:
@@ -66,6 +67,7 @@ async def deep_scan(
             only_main_content=only_main_content,
             stealth=stealth,
             bypass_captcha=bypass_captcha,
+            accept_cookies=accept_cookies,
         )
         scrape_result = await scrape(scrape_req)
 

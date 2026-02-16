@@ -241,6 +241,7 @@ async def scan_endpoint(request: ScanRequest):
             only_main_content=request.only_main_content,
             stealth=request.stealth,
             bypass_captcha=request.bypass_captcha,
+            accept_cookies=request.accept_cookies,
         )
 
         if result.get("error") and not result.get("success"):

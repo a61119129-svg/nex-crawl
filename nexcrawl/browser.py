@@ -94,6 +94,140 @@ async def _human_like_delay(min_ms: int = 500, max_ms: int = 2000):
     await asyncio.sleep(delay)
 
 
+async def _accept_cookie_consent(page) -> bool:
+    """
+    Auto-detect and dismiss cookie consent banners / popups.
+
+    Covers major consent frameworks:
+    - OneTrust, CookieBot, TrustArc, Quantcast, Osano
+    - GDPR banners, cookie bars, privacy popups
+    - Generic "Accept", "Accept All", "I Agree", "Got it" buttons
+
+    Returns True if a consent banner was detected and dismissed.
+    """
+    handled = False
+
+    # ── Common cookie accept button selectors ──────────────────
+    accept_selectors = [
+        # OneTrust
+        "#onetrust-accept-btn-handler",
+        ".onetrust-close-btn-handler",
+        # CookieBot
+        "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+        "#CybotCookiebotDialogBodyButtonAccept",
+        "a#CybotCookiebotDialogBodyLevelButtonAccept",
+        # TrustArc / TRUSTe
+        ".trustarc-agree-btn",
+        "#truste-consent-button",
+        ".truste_overlay .truste-consent-button",
+        # Quantcast / GDPR
+        ".qc-cmp2-summary-buttons button[mode='primary']",
+        ".qc-cmp-button",
+        "#qc-cmp2-ui button.css-47sehv",
+        # Osano
+        ".osano-cm-accept-all",
+        ".osano-cm-dialog__button--type_accept",
+        # Klaro
+        ".klaro .cm-btn-accept",
+        ".klaro .cm-btn-accept-all",
+        # Iubenda
+        ".iubenda-cs-accept-btn",
+        "#iubenda-cs-banner .iubenda-cs-accept-btn",
+        # Didomi
+        "#didomi-notice-agree-button",
+        # Complianz
+        ".cmplz-accept",
+        ".cmplz-btn.cmplz-accept",
+        # Cookie Notice plugin (WP)
+        "#cookie-notice .cn-set-cookie",
+        "#cookie-law-info-bar .cli_action_button",
+        ".cookie-notice-container .cn-set-cookie",
+        # Cookieyes
+        ".cky-btn-accept",
+        # Generic patterns — text-based
+        "button:has-text('Accept All')",
+        "button:has-text('Accept all')",
+        "button:has-text('Accept Cookies')",
+        "button:has-text('Accept cookies')",
+        "button:has-text('Allow All')",
+        "button:has-text('Allow all')",
+        "button:has-text('Allow Cookies')",
+        "button:has-text('I Accept')",
+        "button:has-text('I Agree')",
+        "button:has-text('I agree')",
+        "button:has-text('Agree')",
+        "button:has-text('Got it')",
+        "button:has-text('OK')",
+        "button:has-text('Okay')",
+        "a:has-text('Accept All')",
+        "a:has-text('Accept all')",
+        "a:has-text('Accept Cookies')",
+        "a:has-text('I Agree')",
+        "a:has-text('Got it')",
+        # Generic class/id patterns
+        "[id*='cookie'] button[class*='accept']",
+        "[id*='cookie'] button[class*='agree']",
+        "[id*='cookie'] a[class*='accept']",
+        "[class*='cookie-banner'] button",
+        "[class*='cookie-consent'] button",
+        "[class*='cookie-notice'] button",
+        "[class*='consent-banner'] button",
+        "[class*='gdpr'] button[class*='accept']",
+        "[id*='consent'] button[class*='accept']",
+        "[data-testid*='cookie'] button",
+        "[aria-label*='cookie'] button",
+        "[aria-label*='consent'] button",
+        ".cc-btn.cc-allow",
+        ".cc-accept",
+        ".cc-dismiss",
+        "#cookie-accept",
+        "#accept-cookies",
+        "#acceptCookies",
+        ".cookie-accept",
+        ".accept-cookies",
+        ".js-cookie-accept",
+        ".js-accept-cookies",
+    ]
+
+    for selector in accept_selectors:
+        try:
+            btn = page.locator(selector).first
+            if await btn.is_visible(timeout=300):
+                logger.info("Cookie consent detected — clicking: %s", selector)
+                await _human_like_delay(200, 600)
+                await btn.click()
+                await _human_like_delay(300, 800)
+                handled = True
+                break  # Only need to click one
+        except Exception:
+            continue
+
+    # ── Fallback: dismiss by closing overlay-like cookie divs ─
+    if not handled:
+        close_selectors = [
+            "[id*='cookie'] [class*='close']",
+            "[id*='cookie'] button[aria-label='Close']",
+            "[class*='cookie'] [class*='close']",
+            "[class*='consent'] [class*='close']",
+            "[class*='cookie'] button[aria-label='Close']",
+        ]
+        for selector in close_selectors:
+            try:
+                btn = page.locator(selector).first
+                if await btn.is_visible(timeout=300):
+                    logger.info("Cookie banner close button — clicking: %s", selector)
+                    await btn.click()
+                    await _human_like_delay(200, 500)
+                    handled = True
+                    break
+            except Exception:
+                continue
+
+    if handled:
+        logger.info("Cookie consent banner dismissed")
+    return handled
+
+
 async def _solve_captcha_challenges(page) -> bool:
     """
     Attempt to detect and bypass common CAPTCHA challenges.
@@ -188,6 +322,7 @@ async def render_page(
     timeout: int | None = None,
     stealth: bool = False,
     bypass_captcha: bool = False,
+    accept_cookies: bool = True,
 ) -> tuple[str, int]:
     """
     Render a page using a headless browser and return ``(html, status_code)``.
@@ -204,6 +339,8 @@ async def render_page(
         Enable anti-detection patches and realistic fingerprints.
     bypass_captcha:
         Attempt to detect and bypass reCAPTCHA/hCaptcha/Cloudflare challenges.
+    accept_cookies:
+        Auto-detect and dismiss cookie consent banners.
     """
     use_stealth = stealth or bypass_captcha
     browser = await _get_browser(stealth_mode=use_stealth)
@@ -247,6 +384,10 @@ async def render_page(
             timeout=timeout or config.browser_timeout,
         )
         status_code = response.status if response else 0
+
+        # Accept cookies first
+        if accept_cookies:
+            await _accept_cookie_consent(page)
 
         # Attempt CAPTCHA bypass if enabled
         if bypass_captcha:
@@ -325,7 +466,10 @@ async def render_page_with_filters(
         )
         result["status_code"] = response.status if response else 0
 
-        # Handle CAPTCHAs first
+        # Accept cookies first
+        await _accept_cookie_consent(page)
+
+        # Handle CAPTCHAs
         if bypass_captcha:
             for _ in range(3):
                 detected = await _solve_captcha_challenges(page)
@@ -501,6 +645,9 @@ async def take_screenshot(
             timeout=timeout or config.browser_timeout,
         )
         status_code = response.status if response else 0
+
+        # Accept cookies
+        await _accept_cookie_consent(page)
 
         # Handle CAPTCHAs
         if bypass_captcha:

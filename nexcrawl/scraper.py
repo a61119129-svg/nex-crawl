@@ -142,7 +142,7 @@ async def scrape(request: ScrapeRequest) -> ScrapeResult:
     """Scrape a single URL and return the result in requested formats."""
 
     # Determine whether we need a browser
-    use_browser = request.use_browser or request.wait_for > 0 or request.stealth or request.bypass_captcha
+    use_browser = request.use_browser or request.wait_for > 0 or request.stealth or request.bypass_captcha or request.accept_cookies
 
     try:
         if use_browser:
@@ -153,6 +153,7 @@ async def scrape(request: ScrapeRequest) -> ScrapeResult:
                 timeout=request.timeout,
                 stealth=request.stealth,
                 bypass_captcha=request.bypass_captcha,
+                accept_cookies=request.accept_cookies,
             )
         else:
             resp = await fetch_url(

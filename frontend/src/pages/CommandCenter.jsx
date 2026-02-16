@@ -3,7 +3,7 @@ import {
   Zap, Play, Globe, Camera, Radar, CreditCard, Bug, FileSearch,
   Table, Brain, Copy, Check, Download, ChevronDown, ChevronUp,
   Image, Eye, Loader2, AlertCircle, CheckCircle2, Settings2,
-  Monitor, Shield, ShieldCheck
+  Monitor, Shield, ShieldCheck, Cookie
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import {
@@ -59,9 +59,10 @@ export default function CommandCenter() {
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   // Common options
+  const [acceptCookies, setAcceptCookies] = useState(true)
   const [stealth, setStealth] = useState(false)
   const [bypassCaptcha, setBypassCaptcha] = useState(false)
-  const [useBrowser, setUseBrowser] = useState(false)
+  const [useBrowser, setUseBrowser] = useState(true)
   const [mainContent, setMainContent] = useState(true)
   const [waitFor, setWaitFor] = useState(0)
 
@@ -121,10 +122,11 @@ export default function CommandCenter() {
             data = await scrapeUrl({
               url: url.trim(),
               formats: [scrapeFormat],
-              use_browser: useBrowser || stealth || bypassCaptcha,
+              use_browser: true,
               only_main_content: mainContent,
               wait_for: waitFor,
               stealth, bypass_captcha: bypassCaptcha,
+              accept_cookies: acceptCookies,
             })
             saveHistory({ type: 'scrape', url: url.trim(), time: Date.now(), error: null })
             break
@@ -143,10 +145,11 @@ export default function CommandCenter() {
           case 'scan':
             data = await deepScan({
               url: url.trim(),
-              use_browser: useBrowser || stealth || bypassCaptcha,
+              use_browser: true,
               only_main_content: mainContent,
               include_ai: scanIncludeAi,
               stealth, bypass_captcha: bypassCaptcha,
+              accept_cookies: acceptCookies,
               ...(scanInstruction.trim() ? { instruction: scanInstruction.trim() } : {}),
             })
             break
@@ -154,7 +157,7 @@ export default function CommandCenter() {
           case 'format':
             data = await formatData({
               url: url.trim(),
-              use_browser: useBrowser || stealth || bypassCaptcha,
+              use_browser: true,
               wait_for: waitFor,
               only_main_content: mainContent,
             })
@@ -163,7 +166,7 @@ export default function CommandCenter() {
           case 'ai':
             data = await analyzeUrl({
               url: url.trim(),
-              use_browser: useBrowser || stealth || bypassCaptcha,
+              use_browser: true,
               wait_for: waitFor,
               only_main_content: mainContent,
               ...(aiInstruction.trim() ? { instruction: aiInstruction.trim() } : {}),
@@ -184,7 +187,7 @@ export default function CommandCenter() {
             data = await extractData({
               url: url.trim(),
               schema: schemaObj,
-              use_browser: useBrowser || stealth || bypassCaptcha,
+              use_browser: true,
               wait_for: waitFor,
             })
             break
@@ -196,7 +199,7 @@ export default function CommandCenter() {
               max_depth: crawlDepth,
               max_pages: crawlMaxPages,
               formats: ['markdown'],
-              use_browser: useBrowser,
+              use_browser: true,
             })
             break
 
@@ -213,7 +216,7 @@ export default function CommandCenter() {
 
     await Promise.allSettled(tasks)
     setLoading(false)
-  }, [url, selectedFeatures, scrapeFormat, useBrowser, mainContent, waitFor, stealth, bypassCaptcha, fullPage, vpWidth, vpHeight, scanInstruction, scanIncludeAi, aiInstruction, plansIncludeAi, extractSchema, crawlDepth, crawlMaxPages])
+  }, [url, selectedFeatures, scrapeFormat, useBrowser, mainContent, waitFor, stealth, bypassCaptcha, acceptCookies, fullPage, vpWidth, vpHeight, scanInstruction, scanIncludeAi, aiInstruction, plansIncludeAi, extractSchema, crawlDepth, crawlMaxPages])
 
   const handleCopy = (text, key) => {
     navigator.clipboard.writeText(text)
@@ -241,7 +244,7 @@ export default function CommandCenter() {
     <>
       <div className="page-header">
         <h1><Zap size={24} style={{ color: '#a78bfa' }} /> Command Center</h1>
-        <p>All features in one place — enter a URL, pick what you need, hit Run.</p>
+        <p>All features in one place — everything runs in a real browser with cookie consent, JS rendering & formatted output.</p>
       </div>
 
       {/* ── URL Input ─────────────────────────────────────────── */}
@@ -287,7 +290,16 @@ export default function CommandCenter() {
         </div>
 
         {/* ── Common Options ──────────────────────────────────── */}
-        <div style={{ marginTop: 16, display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+        <div style={{ marginTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <Monitor size={14} style={{ color: '#38bdf8' }} />
+            <span style={{ fontSize: 12, color: '#38bdf8', fontWeight: 600 }}>Browser-first mode — all scraping opens a real browser for cookies, JS & full content</span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+          <label className="toggle-label">
+            <input type="checkbox" checked={acceptCookies} onChange={e => setAcceptCookies(e.target.checked)} />
+            <Cookie size={14} /> Accept Cookies
+          </label>
           <label className="toggle-label">
             <input type="checkbox" checked={stealth} onChange={e => setStealth(e.target.checked)} />
             <Shield size={14} /> Stealth Mode
@@ -297,13 +309,10 @@ export default function CommandCenter() {
             <ShieldCheck size={14} /> Bypass CAPTCHA
           </label>
           <label className="toggle-label">
-            <input type="checkbox" checked={useBrowser} onChange={e => setUseBrowser(e.target.checked)} />
-            <Monitor size={14} /> Use Browser
-          </label>
-          <label className="toggle-label">
             <input type="checkbox" checked={mainContent} onChange={e => setMainContent(e.target.checked)} />
             <Eye size={14} /> Main Content Only
           </label>
+          </div>
         </div>
 
         {/* ── Advanced / Feature-specific options ───────────── */}
