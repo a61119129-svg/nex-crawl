@@ -248,3 +248,94 @@ async def compare_pages(
     except Exception as exc:
         logger.exception("AI comparison failed")
         return {"error": str(exc), "pages_analyzed": len(pages)}
+
+
+# ── Chat with context ─────────────────────────────────────────────────────
+
+CHAT_SYSTEM_PROMPT = """You are NexCrawl AI Assistant — an expert at analyzing web pages, scraped data, and structured content.
+You have been given context from a web page that was scraped and analyzed. Use this data to answer the user's questions accurately and helpfully.
+
+Rules:
+- Base your answers on the provided context data
+- If the answer isn't in the context, say so honestly
+- Be concise but thorough
+- Use markdown formatting for readability
+- If asked about specific data points, quote relevant parts of the context
+- You can make reasonable inferences from the data
+
+Page URL: {url}
+
+=== SCRAPED DATA / CONTEXT ===
+{context}
+=== END CONTEXT ==="""
+
+
+async def chat_with_context(
+    messages: list[dict[str, str]],
+    context: str,
+    url: str = "",
+) -> dict[str, Any]:
+    """
+    Multi-turn chat powered by Groq, grounded in scraped page data.
+
+    Args:
+        messages: List of {"role": "user"|"assistant", "content": "..."} dicts.
+        context: The scraped / structured text to use as grounding context.
+        url: URL of the page being discussed.
+
+    Returns:
+        dict with "reply" (str) and "messages" (updated history).
+    """
+    truncated_ctx = _truncate_content(context, max_chars=15000)
+
+    system_msg = CHAT_SYSTEM_PROMPT.format(
+        url=url or "not specified",
+        context=truncated_ctx or "No context provided.",
+    )
+
+    api_messages = [{"role": "system", "content": system_msg}]
+    for msg in messages:
+        api_messages.append({"role": msg["role"], "content": msg["content"]})
+
+    payload = {
+        "model": GROQ_MODEL,
+        "messages": api_messages,
+        "temperature": 0.4,
+        "max_tokens": 2048,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            for attempt in range(3):
+                resp = await client.post(
+                    GROQ_API_URL,
+                    headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+                    json=payload,
+                )
+                if resp.status_code == 429:
+                    wait = 2 ** attempt + 1
+                    logger.warning("Groq rate-limited on chat, retrying in %ss …", wait)
+                    await asyncio.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                break
+            else:
+                return {"reply": "Rate limited — please try again shortly.", "messages": messages}
+
+            data = resp.json()
+            reply = data["choices"][0]["message"]["content"]
+
+            updated_messages = list(messages) + [{"role": "assistant", "content": reply}]
+
+            return {
+                "reply": reply,
+                "messages": updated_messages,
+                "model": GROQ_MODEL,
+            }
+
+    except Exception as exc:
+        logger.exception("Chat call failed")
+        return {
+            "reply": f"Error: {exc}",
+            "messages": messages,
+        }

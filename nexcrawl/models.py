@@ -250,4 +250,30 @@ class ScreenshotResult(BaseModel):
     status_code: int | None = None
     viewport: dict[str, int] = Field(default_factory=dict)
     full_page: bool = True
+    structured_text: str = Field(default="", description="Markdown-formatted structured text extracted from page layout")
+    layout_sections: list[dict[str, Any]] = Field(default_factory=list, description="Ordered list of page layout sections (headings, paragraphs, tables, etc.)")
+    page_info: dict[str, Any] = Field(default_factory=dict, description="Page metadata and statistics")
+    error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Chat models
+# ---------------------------------------------------------------------------
+
+class ChatMessage(BaseModel):
+    role: str = Field(description="Message role: 'user', 'assistant', or 'system'")
+    content: str = Field(description="Message content")
+
+
+class ChatRequest(BaseModel):
+    """Payload for the /v1/chat endpoint — conversational AI about scraped data."""
+    messages: list[ChatMessage] = Field(description="Conversation history")
+    context: str = Field(default="", description="Scraped data / structured text to use as context")
+    url: str = Field(default="", description="URL of the page being discussed")
+
+
+class ChatResult(BaseModel):
+    reply: str = ""
+    messages: list[dict[str, Any]] = Field(default_factory=list, description="Updated conversation history")
+    success: bool = False
     error: str | None = None

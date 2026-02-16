@@ -108,3 +108,16 @@ export async function takeScreenshot(payload) {
   }
   return res.json();
 }
+
+export async function chatWithAI(payload) {
+  const res = await fetch(`${API_BASE}/v1/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'Chat failed');
+  }
+  return res.json();
+}

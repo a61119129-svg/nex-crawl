@@ -1,14 +1,14 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   Zap, Play, Globe, Camera, Radar, CreditCard, Bug, FileSearch,
   Table, Brain, Copy, Check, Download, ChevronDown, ChevronUp,
   Image, Eye, Loader2, AlertCircle, CheckCircle2, Settings2,
-  Monitor, Shield, ShieldCheck, Cookie
+  Monitor, Shield, ShieldCheck, Cookie, MessageCircle, Send, FileText
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import {
   scrapeUrl, crawlUrl, extractData, formatData, analyzeUrl,
-  deepScan, scrapePlans, takeScreenshot
+  deepScan, scrapePlans, takeScreenshot, chatWithAI
 } from '../api'
 
 /* ── Feature definitions ─────────────────────────────────────── */
@@ -98,6 +98,14 @@ export default function CommandCenter() {
   const [errors, setErrors] = useState({})
   const [openSections, setOpenSections] = useState({})
   const [copied, setCopied] = useState('')
+
+  // Chat state
+  const [chatMessages, setChatMessages] = useState([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
+  const chatEndRef = useRef(null)
+  const [showStructuredText, setShowStructuredText] = useState(false)
 
   const toggleFeature = (id) => setSelected(prev => ({ ...prev, [id]: !prev[id] }))
   const toggleSection = (id) => setOpenSections(prev => ({ ...prev, [id]: !prev[id] }))
@@ -238,6 +246,69 @@ export default function CommandCenter() {
     a.download = `nexcrawl-${Date.now()}.${ext}`
     a.click()
   }
+
+  // Gather all available context for chat
+  const gatherChatContext = useCallback(() => {
+    const parts = []
+    if (results.screenshot?.structured_text) {
+      parts.push('=== SCREENSHOT STRUCTURED TEXT ===\n' + results.screenshot.structured_text)
+    }
+    if (results.scrape) {
+      const content = results.scrape.markdown || results.scrape.html || results.scrape.text || ''
+      if (content) parts.push('=== SCRAPED CONTENT ===\n' + content.substring(0, 10000))
+    }
+    if (results.scan?.content) {
+      parts.push('=== DEEP SCAN ===\n' + (typeof results.scan.content === 'string' ? results.scan.content : JSON.stringify(results.scan.content)).substring(0, 8000))
+    }
+    if (results.ai) {
+      parts.push('=== AI ANALYSIS ===\n' + JSON.stringify(results.ai, null, 2).substring(0, 5000))
+    }
+    if (results.format) {
+      parts.push('=== FORMATTED DATA ===\n' + JSON.stringify(results.format, null, 2).substring(0, 5000))
+    }
+    if (results.extract) {
+      parts.push('=== EXTRACTED DATA ===\n' + JSON.stringify(results.extract, null, 2).substring(0, 5000))
+    }
+    if (results.plans) {
+      parts.push('=== PLANS DATA ===\n' + JSON.stringify(results.plans, null, 2).substring(0, 5000))
+    }
+    if (results.screenshot?.page_info) {
+      parts.push('=== PAGE INFO ===\n' + JSON.stringify(results.screenshot.page_info, null, 2))
+    }
+    return parts.join('\n\n')
+  }, [results])
+
+  const handleSendChat = useCallback(async () => {
+    if (!chatInput.trim() || chatLoading) return
+    const userMsg = { role: 'user', content: chatInput.trim() }
+    const newMessages = [...chatMessages, userMsg]
+    setChatMessages(newMessages)
+    setChatInput('')
+    setChatLoading(true)
+
+    try {
+      const context = gatherChatContext()
+      const res = await chatWithAI({
+        messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+        context,
+        url: url.trim(),
+      })
+      if (res.success && res.reply) {
+        setChatMessages(prev => [...prev, { role: 'assistant', content: res.reply }])
+      } else {
+        setChatMessages(prev => [...prev, { role: 'assistant', content: res.error || 'No response received.' }])
+      }
+    } catch (e) {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${e.message}` }])
+    } finally {
+      setChatLoading(false)
+    }
+  }, [chatInput, chatMessages, chatLoading, gatherChatContext, url])
+
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages])
 
   /* ── Render ────────────────────────────────────────────────── */
   return (
@@ -490,19 +561,49 @@ export default function CommandCenter() {
             <div className="error-box">{errors.screenshot}</div>
           ) : (
             <div>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
                 <button className="btn btn-secondary btn-sm" onClick={() => handleDownloadScreenshot(results.screenshot.screenshot_base64)}>
                   <Download size={14} /> Download PNG
                 </button>
                 <button className="btn btn-secondary btn-sm" onClick={() => handleCopy(results.screenshot.screenshot_base64, 'ss-b64')}>
                   {copied === 'ss-b64' ? <Check size={14} /> : <Copy size={14} />} Copy Base64
                 </button>
+                {results.screenshot.structured_text && (
+                  <button className="btn btn-secondary btn-sm" onClick={() => setShowStructuredText(p => !p)} style={{ background: showStructuredText ? '#1e1b4b' : undefined, borderColor: showStructuredText ? '#a78bfa' : undefined }}>
+                    <FileText size={14} /> {showStructuredText ? 'Hide' : 'Show'} Structured Text
+                  </button>
+                )}
+                {results.screenshot.structured_text && (
+                  <button className="btn btn-secondary btn-sm" onClick={() => handleCopy(results.screenshot.structured_text, 'ss-text')}>
+                    {copied === 'ss-text' ? <Check size={14} /> : <Copy size={14} />} Copy Text
+                  </button>
+                )}
                 {results.screenshot.title && (
                   <span style={{ color: '#94a3b8', fontSize: 13, marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
                     {results.screenshot.title} &middot; {results.screenshot.viewport?.width}x{results.screenshot.viewport?.height}
                   </span>
                 )}
               </div>
+
+              {/* Page Info Stats */}
+              {results.screenshot.page_info?.word_count > 0 && (
+                <div className="stats-row" style={{ marginBottom: 12 }}>
+                  {[
+                    { label: 'Words', value: results.screenshot.page_info.word_count },
+                    { label: 'Links', value: results.screenshot.page_info.link_count },
+                    { label: 'Images', value: results.screenshot.page_info.image_count },
+                    { label: 'Headings', value: results.screenshot.page_info.heading_count },
+                    { label: 'Sections', value: results.screenshot.page_info.section_count },
+                  ].map(s => (
+                    <div key={s.label} className="stat-card mini">
+                      <div className="stat-label">{s.label}</div>
+                      <div className="stat-value" style={{ fontSize: 14 }}>{s.value ?? 0}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Screenshot Image */}
               <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid #1e293b', maxHeight: 600, overflowY: 'auto' }}>
                 <img
                   src={`data:image/png;base64,${results.screenshot.screenshot_base64}`}
@@ -510,6 +611,41 @@ export default function CommandCenter() {
                   style={{ width: '100%', display: 'block' }}
                 />
               </div>
+
+              {/* Structured Text Output */}
+              {showStructuredText && results.screenshot.structured_text && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <FileText size={16} style={{ color: '#a78bfa' }} />
+                    <span style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>Structured Layout Text</span>
+                    <span style={{ fontSize: 12, color: '#64748b', marginLeft: 'auto' }}>
+                      {results.screenshot.layout_sections?.length || 0} sections extracted
+                    </span>
+                  </div>
+                  <div className="result-box" style={{ maxHeight: 500, overflow: 'auto', fontSize: 13 }}>
+                    <ReactMarkdown>{results.screenshot.structured_text}</ReactMarkdown>
+                  </div>
+
+                  {/* Layout Section Types Breakdown */}
+                  {results.screenshot.layout_sections?.length > 0 && (
+                    <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {Object.entries(
+                        results.screenshot.layout_sections.reduce((acc, s) => {
+                          acc[s.type] = (acc[s.type] || 0) + 1
+                          return acc
+                        }, {})
+                      ).map(([type, count]) => (
+                        <span key={type} style={{
+                          padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 500,
+                          background: '#1e1b4b', color: '#a78bfa', border: '1px solid #312e81',
+                        }}>
+                          {type}: {count}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </ResultSection>
@@ -862,6 +998,121 @@ export default function CommandCenter() {
             </div>
           )}
         </ResultSection>
+      )}
+
+      {/* ── AI Chat Panel ──────────────────────────────────────── */}
+      {Object.keys(results).length > 0 && (
+        <div className="card" style={{ border: chatOpen ? '1px solid #6366f1' : '1px solid #1e293b', transition: 'border-color 0.3s' }}>
+          <div
+            onClick={() => setChatOpen(p => !p)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '14px 20px',
+              cursor: 'pointer', userSelect: 'none',
+            }}
+          >
+            <MessageCircle size={18} style={{ color: '#818cf8' }} />
+            <span style={{ fontWeight: 600, fontSize: 15, color: '#e2e8f0' }}>AI Chat</span>
+            <span style={{ fontSize: 12, color: '#64748b' }}>Ask questions about your scraped data</span>
+            <span style={{ marginLeft: 'auto' }}>
+              {chatOpen ? <ChevronUp size={16} style={{ color: '#64748b' }} /> : <ChevronDown size={16} style={{ color: '#64748b' }} />}
+            </span>
+          </div>
+
+          {chatOpen && (
+            <div style={{ padding: '0 20px 16px' }}>
+              {/* Chat messages */}
+              <div style={{
+                maxHeight: 400, overflowY: 'auto', marginBottom: 12,
+                padding: 12, borderRadius: 10, background: '#0f172a',
+                border: '1px solid #1e293b', minHeight: 120,
+              }}>
+                {chatMessages.length === 0 && (
+                  <div style={{ textAlign: 'center', color: '#475569', padding: '30px 0', fontSize: 13 }}>
+                    <MessageCircle size={24} style={{ opacity: 0.3, marginBottom: 8 }} /><br />
+                    Ask anything about the scraped data.<br />
+                    <span style={{ fontSize: 11, color: '#334155' }}>
+                      Available context: {Object.keys(results).join(', ')}
+                    </span>
+                  </div>
+                )}
+
+                {chatMessages.map((msg, i) => (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                    marginBottom: 10,
+                  }}>
+                    <div style={{
+                      maxWidth: '80%', padding: '10px 14px', borderRadius: 12,
+                      background: msg.role === 'user' ? '#312e81' : '#1e293b',
+                      border: `1px solid ${msg.role === 'user' ? '#4338ca' : '#334155'}`,
+                      color: '#e2e8f0', fontSize: 13, lineHeight: 1.6,
+                    }}>
+                      {msg.role === 'assistant' ? (
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      ) : (
+                        <span>{msg.content}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {chatLoading && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 10 }}>
+                    <div style={{
+                      padding: '10px 14px', borderRadius: 12,
+                      background: '#1e293b', border: '1px solid #334155',
+                      color: '#818cf8', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6,
+                    }}>
+                      <Loader2 size={14} className="spin" /> Thinking…
+                    </div>
+                  </div>
+                )}
+
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Chat input */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  className="input"
+                  placeholder="Ask about the scraped data…"
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSendChat()}
+                  disabled={chatLoading}
+                  style={{ flex: 1, fontSize: 14 }}
+                />
+                <button
+                  className="btn btn-primary"
+                  onClick={handleSendChat}
+                  disabled={chatLoading || !chatInput.trim()}
+                  style={{ padding: '10px 16px' }}
+                >
+                  {chatLoading ? <Loader2 size={16} className="spin" /> : <Send size={16} />}
+                </button>
+              </div>
+
+              {/* Quick actions */}
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                {[
+                  'Summarize the page content',
+                  'What are the main topics?',
+                  'List all links found',
+                  'What data was extracted?',
+                ].map(q => (
+                  <button
+                    key={q}
+                    className="btn btn-secondary btn-sm"
+                    style={{ fontSize: 11, padding: '4px 10px' }}
+                    onClick={() => { setChatInput(q); }}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Spacer at bottom */}

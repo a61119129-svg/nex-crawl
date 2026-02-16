@@ -663,6 +663,211 @@ async def take_screenshot(
         # Get page title
         title = await page.title()
 
+        # ── Extract structured layout text from DOM ──────────
+        layout_data = await page.evaluate("""() => {
+            const sections = [];
+            const seen = new Set();
+
+            function addSection(type, content, extra = {}) {
+                const key = type + '::' + content;
+                if (seen.has(key) || !content.trim()) return;
+                seen.add(key);
+                sections.push({ type, content: content.trim(), ...extra });
+            }
+
+            // Walk the DOM in reading order
+            const walker = document.createTreeWalker(
+                document.body,
+                NodeFilter.SHOW_ELEMENT,
+                {
+                    acceptNode: (node) => {
+                        const tag = node.tagName.toLowerCase();
+                        const skip = ['script','style','noscript','svg','path','meta','link','head'];
+                        if (skip.includes(tag)) return NodeFilter.FILTER_REJECT;
+                        const style = window.getComputedStyle(node);
+                        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')
+                            return NodeFilter.FILTER_REJECT;
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                }
+            );
+
+            let node;
+            while (node = walker.nextNode()) {
+                const tag = node.tagName.toLowerCase();
+
+                // Headings
+                if (/^h[1-6]$/.test(tag)) {
+                    const level = parseInt(tag[1]);
+                    addSection('heading', node.innerText, { level });
+                }
+                // Paragraphs
+                else if (tag === 'p') {
+                    addSection('paragraph', node.innerText);
+                }
+                // List items
+                else if (tag === 'ul' || tag === 'ol') {
+                    const items = Array.from(node.querySelectorAll(':scope > li'))
+                        .map(li => li.innerText.trim()).filter(Boolean);
+                    if (items.length > 0) {
+                        addSection('list', items.join('\\n'), { ordered: tag === 'ol', items });
+                    }
+                }
+                // Tables
+                else if (tag === 'table') {
+                    const rows = [];
+                    node.querySelectorAll('tr').forEach(tr => {
+                        const cells = Array.from(tr.querySelectorAll('th, td'))
+                            .map(c => c.innerText.trim());
+                        if (cells.some(c => c)) rows.push(cells);
+                    });
+                    if (rows.length > 0) {
+                        addSection('table', rows.map(r => r.join(' | ')).join('\\n'), { rows });
+                    }
+                }
+                // Images with alt text
+                else if (tag === 'img') {
+                    const alt = node.getAttribute('alt') || '';
+                    const src = node.getAttribute('src') || '';
+                    if (alt || src) {
+                        addSection('image', alt || src, { alt, src: src.substring(0, 200) });
+                    }
+                }
+                // Links
+                else if (tag === 'a') {
+                    const text = node.innerText.trim();
+                    const href = node.getAttribute('href') || '';
+                    if (text && href && !href.startsWith('#') && !href.startsWith('javascript:')) {
+                        addSection('link', text, { href: href.substring(0, 300) });
+                    }
+                }
+                // Blockquotes
+                else if (tag === 'blockquote') {
+                    addSection('quote', node.innerText);
+                }
+                // Code blocks
+                else if (tag === 'pre' || tag === 'code') {
+                    if (tag === 'pre' || !node.closest('pre')) {
+                        addSection('code', node.innerText);
+                    }
+                }
+                // Form elements
+                else if (tag === 'form') {
+                    const inputs = Array.from(node.querySelectorAll('input, select, textarea'))
+                        .map(el => {
+                            const label = el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.getAttribute('name') || el.type;
+                            return label;
+                        }).filter(Boolean);
+                    if (inputs.length > 0) {
+                        addSection('form', 'Form fields: ' + inputs.join(', '), { fields: inputs });
+                    }
+                }
+                // Buttons
+                else if (tag === 'button' || (tag === 'input' && ['submit','button'].includes(node.type))) {
+                    const text = node.innerText || node.value || '';
+                    if (text.trim()) addSection('button', text.trim());
+                }
+                // Navigation
+                else if (tag === 'nav') {
+                    const links = Array.from(node.querySelectorAll('a'))
+                        .map(a => a.innerText.trim()).filter(Boolean);
+                    if (links.length > 0) {
+                        addSection('navigation', links.join(' | '), { links });
+                    }
+                }
+                // Divs / sections with direct text (fallback)
+                else if (['div', 'section', 'article', 'main', 'aside', 'footer', 'header', 'span'].includes(tag)) {
+                    // Only capture direct text nodes (not nested elements' text)
+                    const directText = Array.from(node.childNodes)
+                        .filter(n => n.nodeType === Node.TEXT_NODE)
+                        .map(n => n.textContent.trim())
+                        .filter(Boolean)
+                        .join(' ');
+                    if (directText.length > 20) {
+                        addSection('text', directText);
+                    }
+                }
+            }
+
+            // Build structured text output
+            let structuredText = '';
+            for (const s of sections) {
+                switch (s.type) {
+                    case 'heading':
+                        structuredText += '#'.repeat(s.level) + ' ' + s.content + '\\n\\n';
+                        break;
+                    case 'paragraph':
+                    case 'text':
+                        structuredText += s.content + '\\n\\n';
+                        break;
+                    case 'list':
+                        (s.items || s.content.split('\\n')).forEach((item, i) => {
+                            structuredText += (s.ordered ? (i+1) + '. ' : '- ') + item + '\\n';
+                        });
+                        structuredText += '\\n';
+                        break;
+                    case 'table':
+                        if (s.rows && s.rows.length > 0) {
+                            s.rows.forEach((row, i) => {
+                                structuredText += '| ' + row.join(' | ') + ' |\\n';
+                                if (i === 0) structuredText += '|' + row.map(() => '---').join('|') + '|\\n';
+                            });
+                            structuredText += '\\n';
+                        }
+                        break;
+                    case 'image':
+                        structuredText += '[Image: ' + s.content + ']\\n\\n';
+                        break;
+                    case 'link':
+                        structuredText += '[' + s.content + '](' + (s.href || '') + ')\\n';
+                        break;
+                    case 'quote':
+                        structuredText += '> ' + s.content.replace(/\\n/g, '\\n> ') + '\\n\\n';
+                        break;
+                    case 'code':
+                        structuredText += '```\\n' + s.content + '\\n```\\n\\n';
+                        break;
+                    case 'form':
+                        structuredText += '[Form: ' + s.content + ']\\n\\n';
+                        break;
+                    case 'button':
+                        structuredText += '[Button: ' + s.content + ']\\n';
+                        break;
+                    case 'navigation':
+                        structuredText += 'Nav: ' + s.content + '\\n\\n';
+                        break;
+                }
+            }
+
+            // Page metadata
+            const meta = {};
+            const desc = document.querySelector('meta[name="description"]');
+            if (desc) meta.description = desc.content;
+            const keywords = document.querySelector('meta[name="keywords"]');
+            if (keywords) meta.keywords = keywords.content;
+            const ogTitle = document.querySelector('meta[property="og:title"]');
+            if (ogTitle) meta.og_title = ogTitle.content;
+            const ogDesc = document.querySelector('meta[property="og:description"]');
+            if (ogDesc) meta.og_description = ogDesc.content;
+            const canonical = document.querySelector('link[rel="canonical"]');
+            if (canonical) meta.canonical = canonical.href;
+
+            return {
+                structured_text: structuredText,
+                layout_sections: sections.slice(0, 500),
+                page_info: {
+                    title: document.title,
+                    meta: meta,
+                    word_count: document.body.innerText.split(/\\s+/).filter(Boolean).length,
+                    link_count: document.querySelectorAll('a[href]').length,
+                    image_count: document.querySelectorAll('img').length,
+                    heading_count: document.querySelectorAll('h1,h2,h3,h4,h5,h6').length,
+                    form_count: document.querySelectorAll('form').length,
+                    section_count: sections.length,
+                }
+            };
+        }""")
+
         # Take screenshot
         screenshot_bytes = await page.screenshot(
             full_page=full_page,
@@ -678,6 +883,9 @@ async def take_screenshot(
             "status_code": status_code,
             "viewport": {"width": viewport_width, "height": viewport_height},
             "full_page": full_page,
+            "structured_text": layout_data.get("structured_text", ""),
+            "layout_sections": layout_data.get("layout_sections", []),
+            "page_info": layout_data.get("page_info", {}),
         }
 
     finally:

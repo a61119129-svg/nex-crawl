@@ -12,7 +12,7 @@ from nexcrawl.browser import close_browser, take_screenshot
 from nexcrawl.crawler import crawl_sync, get_crawl_job, start_crawl
 from nexcrawl.extractor import extract
 from nexcrawl.formatter import format_scraped_data
-from nexcrawl.ai_analyzer import analyze_content, analyze_with_prompt
+from nexcrawl.ai_analyzer import analyze_content, analyze_with_prompt, chat_with_context
 from nexcrawl.deep_scan import deep_scan
 from nexcrawl.plans_scraper import scrape_plans_page
 from nexcrawl.models import (
@@ -33,6 +33,8 @@ from nexcrawl.models import (
     ScreenshotResult,
     ScrapeRequest,
     ScrapeResult,
+    ChatRequest,
+    ChatResult,
 )
 from nexcrawl.scraper import scrape
 
@@ -345,7 +347,37 @@ async def screenshot_endpoint(request: ScreenshotRequest):
             status_code=result.get("status_code"),
             viewport=result.get("viewport", {}),
             full_page=result.get("full_page", True),
+            structured_text=result.get("structured_text", ""),
+            layout_sections=result.get("layout_sections", []),
+            page_info=result.get("page_info", {}),
         )
     except Exception as exc:
         logger.exception("Screenshot failed for %s", request.url)
         return ScreenshotResult(url=request.url, error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Chat
+# ---------------------------------------------------------------------------
+
+@app.post("/v1/chat", response_model=ChatResult)
+async def chat_endpoint(request: ChatRequest):
+    """
+    Conversational AI chat grounded in scraped page data.
+    Send messages and context to get AI responses about your scraped content.
+    """
+    try:
+        messages = [{"role": m.role, "content": m.content} for m in request.messages]
+        result = await chat_with_context(
+            messages=messages,
+            context=request.context,
+            url=request.url,
+        )
+        return ChatResult(
+            reply=result.get("reply", ""),
+            messages=result.get("messages", messages),
+            success=True,
+        )
+    except Exception as exc:
+        logger.exception("Chat failed")
+        return ChatResult(error=str(exc))
